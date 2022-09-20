@@ -82,7 +82,7 @@ int gnb_load_keypair(gnb_core_t *gnb_core){
     close(private_file_fd);
 
     if ( 128 != rlen ) {
-        GNB_ERROR1(gnb_core->log, GNB_LOG_ID_CORE, "load node private file[%s]  key error\n", node_private_file_name);
+        GNB_ERROR1(gnb_core->log, GNB_LOG_ID_CORE, "load node private file[%s] key error\n", node_private_file_name);
         exit(0);
     }
 
@@ -258,9 +258,7 @@ void gnb_build_passcode(void *passcode_bin, char *string_in) {
         memcpy(passcode_string, passcode_string_offset, passcode_string_len);
     }
 
-    passcode_bin = gnb_hex2bin(passcode_string, passcode_bin, 4);
-
-    if ( NULL != passcode_bin ) {
+    if ( NULL == gnb_hex2bin(passcode_string, passcode_bin, 4) ) {
         memcpy(passcode_bin, passcode_string, 4);
     }
 

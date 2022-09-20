@@ -30,6 +30,7 @@
 #include "gnb_conf_type.h"
 #include "gnb_ctl_block.h"
 #include "gnb_hash32.h"
+#include "gnb_node_type.h"
 #include "gnb_worker_type.h"
 #include "gnb_log.h"
 
@@ -52,6 +53,8 @@ typedef struct _gnb_es_ctx{
 
 	gnb_hash32_map_t *uuid_node_map;
 
+    gnb_node_t *local_node;
+
 	gnb_worker_t *discover_in_lan_worker;
 
 	char *pid_file;
@@ -59,7 +62,11 @@ typedef struct _gnb_es_ctx{
 	char *wan_address6_file;
 
 	int service_opt;
-	int upnp_opt;
+
+    int upnp_opt;
+	char *upnp_multicase_if;
+    char *upnp_gateway4;
+
 	int resolv_opt;
 
 	int broadcast_address_opt;
@@ -68,6 +75,7 @@ typedef struct _gnb_es_ctx{
 
 	int if_up_opt;
 	int if_down_opt;
+	int if_loop_opt;
 
 	gnb_log_ctx_t    *log;
 

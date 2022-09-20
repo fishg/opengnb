@@ -35,7 +35,6 @@
 #endif
 
 #include <sys/time.h>
-#include <signal.h>
 
 #include "gnb_conf_file.h"
 #include "gnb_config_lite.h"
@@ -57,10 +56,7 @@ void log_out_description(gnb_log_ctx_t *log);
 
 extern  gnb_arg_list_t *gnb_es_arg_list;
 extern int is_verbose;
-
-void signal_handler(int signum){
-
-}
+extern int is_trace;
 
 static void gnb_setup_env(gnb_core_t *gnb_core){
 
@@ -97,9 +93,9 @@ static void init_ctl_block(gnb_core_t *gnb_core, gnb_conf_t *conf){
 
     mmap_block = gnb_mmap_create(conf->map_file, block_size, GNB_MMAP_TYPE_READWRITE|GNB_MMAP_TYPE_CREATE);
 
-    if (NULL==mmap_block) {
-        printf("init_ctl_block error[%p]\n",mmap_block);
-        exit(0);
+    if ( NULL==mmap_block ) {
+        printf("init_ctl_block error[%p] map_file=%s\n",mmap_block, conf->map_file);
+        exit(1);
     }
 
     memory = gnb_mmap_get_block(mmap_block);
@@ -473,42 +469,84 @@ gnb_core_t* gnb_core_create(gnb_conf_t *conf){
     gnb_core->ifname = (char *)gnb_core->ctl_block->core_zone->ifname;
     gnb_core->if_device_string = (char *)gnb_core->ctl_block->core_zone->if_device_string;
 
-    gnb_core->uuid_node_map   = gnb_hash32_create(gnb_core->heap, 1024,1024); //以节点的uuid32作为key的 node 表
-    gnb_core->ipv4_node_map   = gnb_hash32_create(gnb_core->heap, 1024,1024);
+    gnb_core->uuid_node_map   = gnb_hash32_create(gnb_core->heap, 1024, 1024); //以节点的uuid32作为key的 node 表
+    gnb_core->ipv4_node_map   = gnb_hash32_create(gnb_core->heap, 1024, 1024);
 
     //以节点的subnet(uint32)作为key的 node 表
-    gnb_core->subneta_node_map = gnb_hash32_create(gnb_core->heap, 1024,1024);
-    gnb_core->subnetb_node_map = gnb_hash32_create(gnb_core->heap, 1024,1024);
-    gnb_core->subnetc_node_map = gnb_hash32_create(gnb_core->heap, 1024,1024);
+    gnb_core->subneta_node_map = gnb_hash32_create(gnb_core->heap, 1024, 1024);
+    gnb_core->subnetb_node_map = gnb_hash32_create(gnb_core->heap, 1024, 1024);
+    gnb_core->subnetc_node_map = gnb_hash32_create(gnb_core->heap, 1024, 1024);
 
     int64_t now_sec = gnb_timestamp_sec();
     gnb_update_time_seed(gnb_core, now_sec);
 
+
     if ( 0 == gnb_core->conf->lite_mode ) {
-        gnb_config_file(gnb_core);
-    } else {
-        gnb_config_lite(gnb_core);
-    }
 
-    if ( 0==conf->daemon && 1==is_verbose ) {
+        //加载 node.conf
+        local_node_file_config(gnb_core);
 
-        gnb_core->conf->console_log_level        = 2;
-        gnb_core->conf->core_log_level           = 2;
-        gnb_core->conf->pf_log_level             = 2;
-        gnb_core->conf->main_log_level           = 2;
-        gnb_core->conf->node_log_level           = 2;
-        gnb_core->conf->index_log_level          = 2;
-        gnb_core->conf->index_service_log_level  = 2;
-        gnb_core->conf->detect_log_level         = 2;
+        if ( 0==gnb_core->conf->daemon ) {
 
-        if ( 1==gnb_core->conf->if_dump ) {
-            gnb_core->conf->console_log_level        = 3;
-            gnb_core->conf->pf_log_level             = 3;
+            if ( 1==is_verbose ) {
+                gnb_core->conf->console_log_level        = 2;
+                gnb_core->conf->core_log_level           = 2;
+                gnb_core->conf->pf_log_level             = 2;
+                gnb_core->conf->main_log_level           = 2;
+                gnb_core->conf->node_log_level           = 2;
+                gnb_core->conf->index_log_level          = 2;
+                gnb_core->conf->index_service_log_level  = 2;
+                gnb_core->conf->detect_log_level         = 2;
+            }
+
+            if ( 1==is_trace ) {
+                gnb_core->conf->console_log_level        = 3;
+                gnb_core->conf->core_log_level           = 3;
+                gnb_core->conf->pf_log_level             = 3;
+                gnb_core->conf->main_log_level           = 3;
+                gnb_core->conf->node_log_level           = 3;
+                gnb_core->conf->index_log_level          = 3;
+                gnb_core->conf->index_service_log_level  = 3;
+                gnb_core->conf->detect_log_level         = 3;
+            }
+
         }
 
+        setup_log_ctx(gnb_core->conf, gnb_core->log);
+        gnb_config_file(gnb_core);
+
+    } else {
+
+        if ( 0==gnb_core->conf->daemon ) {
+
+            if ( 1==is_verbose ) {
+                gnb_core->conf->console_log_level        = 2;
+                gnb_core->conf->core_log_level           = 2;
+                gnb_core->conf->pf_log_level             = 2;
+                gnb_core->conf->main_log_level           = 2;
+                gnb_core->conf->node_log_level           = 2;
+                gnb_core->conf->index_log_level          = 2;
+                gnb_core->conf->index_service_log_level  = 2;
+                gnb_core->conf->detect_log_level         = 2;
+            }
+
+            if ( 1==is_trace ) {
+                gnb_core->conf->console_log_level        = 3;
+                gnb_core->conf->core_log_level           = 3;
+                gnb_core->conf->pf_log_level             = 3;
+                gnb_core->conf->main_log_level           = 3;
+                gnb_core->conf->node_log_level           = 3;
+                gnb_core->conf->index_log_level          = 3;
+                gnb_core->conf->index_service_log_level  = 3;
+                gnb_core->conf->detect_log_level         = 3;
+            }
+
+        }
+
+        gnb_config_lite(gnb_core);
+        setup_log_ctx(gnb_core->conf, gnb_core->log);
     }
 
-    setup_log_ctx(gnb_core->conf, gnb_core->log);
 
     log_out_description(gnb_core->log);
 
@@ -532,7 +570,7 @@ gnb_core_t* gnb_core_create(gnb_conf_t *conf){
     pf = gnb_find_pf_mod_by_name(gnb_core->conf->pf_route);
 
     if ( NULL== pf ) {
-        GNB_ERROR1(gnb_core->log,GNB_LOG_ID_CORE,"pf_route '%s' not exist\n", gnb_core->conf->pf_route);
+        GNB_ERROR1(gnb_core->log, GNB_LOG_ID_CORE, "pf_route '%s' not exist\n", gnb_core->conf->pf_route);
         return NULL;
     }
 
@@ -560,13 +598,14 @@ skip_crypto:
     gnb_pf_conf(gnb_core);
 
     if ( NULL==gnb_core->local_node ) {
-        GNB_ERROR1(gnb_core->log,GNB_LOG_ID_CORE,"local node is miss\n");
+        GNB_ERROR1(gnb_core->log, GNB_LOG_ID_CORE, "local node is miss\n");
         return NULL;
     }
 
-    gnb_core->tun_payload  = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->tun_payload_block;
-    gnb_core->inet_payload = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->inet_payload_block;
-
+    gnb_core->tun_payload0  = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->tun_payload_block;
+    gnb_core->inet_payload0 = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->inet_payload_block;
+    gnb_core->tun_payload  = (void *)gnb_core->tun_payload0  + GNB_PAYLOAD_BUFFER_PADDING_SIZE;
+    gnb_core->inet_payload = (void *)gnb_core->inet_payload0 + GNB_PAYLOAD_BUFFER_PADDING_SIZE;
 
 #if defined(__FreeBSD__)
     gnb_core->drv = &gnb_tun_drv_freebsd;
@@ -588,7 +627,15 @@ skip_crypto:
 
 
 #if defined(_WIN32)
-    gnb_core->drv = &gnb_tun_drv_win32;
+
+    if ( GNB_IF_DRV_TYPE_TAP_WINDOWS == conf->if_drv ) {
+        gnb_core->drv = &gnb_tun_drv_win32;
+    } else if ( GNB_IF_DRV_TYPE_TAP_WINTUN == conf->if_drv ) {
+        gnb_core->drv = &gnb_tun_drv_wintun;
+    } else {
+        gnb_core->drv = &gnb_tun_drv_win32;
+    }
+
 #endif
 
     if ( gnb_core->conf->activate_tun ) {
@@ -648,16 +695,29 @@ gnb_core_t* gnb_core_index_service_create(gnb_conf_t *conf){
     gnb_core->ifname = (char *)gnb_core->ctl_block->core_zone->ifname;
     gnb_core->if_device_string = (char *)gnb_core->ctl_block->core_zone->if_device_string;
 
-    if ( 0==conf->daemon && 1==is_verbose ) {
+    if ( 0==conf->daemon ) {
 
-        gnb_core->conf->console_log_level        = 2;
-        gnb_core->conf->core_log_level           = 2;
-        gnb_core->conf->pf_log_level             = 2;
-        gnb_core->conf->main_log_level           = 2;
-        gnb_core->conf->node_log_level           = 2;
-        gnb_core->conf->index_log_level          = 2;
-        gnb_core->conf->index_service_log_level  = 2;
-        gnb_core->conf->detect_log_level         = 2;
+        if ( 1==is_verbose ) {
+            gnb_core->conf->console_log_level        = 2;
+            gnb_core->conf->core_log_level           = 2;
+            gnb_core->conf->pf_log_level             = 2;
+            gnb_core->conf->main_log_level           = 2;
+            gnb_core->conf->node_log_level           = 2;
+            gnb_core->conf->index_log_level          = 2;
+            gnb_core->conf->index_service_log_level  = 2;
+            gnb_core->conf->detect_log_level         = 2;
+        }
+
+        if ( 1==is_trace ) {
+            gnb_core->conf->console_log_level        = 3;
+            gnb_core->conf->core_log_level           = 3;
+            gnb_core->conf->pf_log_level             = 3;
+            gnb_core->conf->main_log_level           = 3;
+            gnb_core->conf->node_log_level           = 3;
+            gnb_core->conf->index_log_level          = 3;
+            gnb_core->conf->index_service_log_level  = 3;
+            gnb_core->conf->detect_log_level         = 3;
+        }
 
         if ( 1==gnb_core->conf->if_dump ) {
             gnb_core->conf->console_log_level        = 3;
@@ -676,8 +736,11 @@ gnb_core_t* gnb_core_index_service_create(gnb_conf_t *conf){
 
     snprintf(gnb_core->ifname,256,"%s", gnb_core->conf->ifname);
 
-    gnb_core->tun_payload  = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->tun_payload_block;
-    gnb_core->inet_payload = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->inet_payload_block;
+    gnb_core->tun_payload0  = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->tun_payload_block;
+    gnb_core->inet_payload0 = (gnb_payload16_t *)gnb_core->ctl_block->core_zone->inet_payload_block;
+
+    gnb_core->tun_payload  = gnb_core->tun_payload0  + GNB_PAYLOAD_BUFFER_PADDING_SIZE;
+    gnb_core->inet_payload = gnb_core->inet_payload0 + GNB_PAYLOAD_BUFFER_PADDING_SIZE;
 
     gnb_core->index_service_worker  = gnb_worker_init("gnb_index_service_worker",  gnb_core);
     gnb_core->main_worker           = gnb_worker_init("gnb_main_worker", gnb_core);
@@ -695,10 +758,6 @@ void gnb_core_release(gnb_core_t *gnb_core){
 
     gnb_pf_release(gnb_core);
 
-    gnb_pf_array_release(gnb_core->heap, gnb_core->pf_array);
-
-    gnb_pf_ctx_array_release(gnb_core->heap, gnb_core->pf_ctx_array);
-
 PUBLIC_INDEX_RELEASE:
 
     gnb_heap_free(gnb_core->heap ,gnb_core);
@@ -709,12 +768,6 @@ PUBLIC_INDEX_RELEASE:
 void gnb_core_index_service_start(gnb_core_t *gnb_core){
 
     int ret;
-
-    signal(SIGTERM,SIG_IGN);
-
-#ifdef __UNIX_LIKE_OS__
-    signal(SIGALRM,signal_handler);
-#endif
 
     GNB_LOG1(gnb_core->log, GNB_LOG_ID_CORE,"GNB Public Index Service Start.....\n");
 
@@ -730,12 +783,6 @@ void gnb_core_index_service_start(gnb_core_t *gnb_core){
 void gnb_core_start(gnb_core_t *gnb_core){
 
     int ret;
-
-    signal(SIGPIPE,SIG_IGN);
-
-#ifdef __UNIX_LIKE_OS__
-    signal(SIGALRM,signal_handler);
-#endif
 
     GNB_LOG1(gnb_core->log, GNB_LOG_ID_CORE, "Start.....\n");
 
@@ -860,11 +907,6 @@ static void exec_es(gnb_core_t *gnb_core) {
         return;
     }
 
-    if ( gnb_es_arg_list->argc < 4 ) {
-        GNB_LOG3(gnb_core->log, GNB_LOG_ID_CORE, "gnb_es argv error, skip exec '%s' argv=%s\n", gnb_es_bin_path, es_arg_string);
-        return;
-    }
-
     GNB_LOG3(gnb_core->log, GNB_LOG_ID_CORE, "exec gnb_es argv '%s'\n", es_arg_string);
 
     pid_gnb_es = gnb_exec(gnb_es_bin_path, gnb_core->conf->binary_dir, gnb_es_arg_list, GNB_EXEC_WAIT);
@@ -872,8 +914,6 @@ static void exec_es(gnb_core_t *gnb_core) {
     if ( -1 == pid_gnb_es ) {
         return;
     }
-
-    waitpid(pid_gnb_es, NULL, 0);
 
 }
 #endif
@@ -896,26 +936,51 @@ static void exec_es(gnb_core_t *gnb_core) {
         return;
     }
 
-    if ( gnb_es_arg_list->argc < 4 ) {
-        GNB_LOG3(gnb_core->log, GNB_LOG_ID_CORE, "gnb_es argv error, skip exec '%s' argv=%s\n", gnb_es_bin_path, es_arg_string);
-        return;
-    }
-
     GNB_LOG3(gnb_core->log, GNB_LOG_ID_CORE, "exec gnb_es argv '%s'\n", es_arg_string);
 
-    pid_gnb_es = gnb_exec(gnb_es_bin_path, gnb_core->conf->binary_dir, gnb_es_arg_list, GNB_EXEC_BACKGROUND);
+    pid_gnb_es = gnb_exec(gnb_es_bin_path, gnb_core->conf->binary_dir, gnb_es_arg_list, GNB_EXEC_BACKGROUND|GNB_EXEC_WAIT );
 
 }
 #endif
 
 
-#define GNB_EXEC_ES_INTERVAL_TIME_SEC  (60*5)
+static void exec_loop_script(gnb_core_t *gnb_core, const char *script_file_name){
+
+    char script_dir[PATH_MAX];
+    char script_file[PATH_MAX+NAME_MAX];
+
+    int arg_list_size = 1;
+
+    pid_t  pid = 0;
+
+    gnb_arg_list_t *arg_list = (gnb_arg_list_t *)alloca( sizeof(gnb_arg_list_t) + sizeof(char *) * arg_list_size );
+
+    arg_list->size = arg_list_size;
+    arg_list->argc = 0;
+
+    strncpy(script_dir, gnb_core->conf->conf_dir, PATH_MAX);
+    strncat(script_dir, "/scripts", PATH_MAX-strlen(script_dir));
+
+    snprintf(script_file, PATH_MAX+NAME_MAX,"%s/%s", script_dir, script_file_name);
+
+    gnb_arg_append(arg_list, script_file);
+
+    pid = gnb_exec(script_file, script_dir, arg_list, GNB_EXEC_WAIT);
+
+    return;
+
+}
+
+
+#define GNB_EXEC_ES_INTERVAL_TIME_SEC      (60*5)
+#define GNB_EXEC_SCRIPT_INTERVAL_TIME_SEC  (60)
 
 void primary_process_loop( gnb_core_t *gnb_core ){
 
     int ret;
 
     uint64_t last_exec_es_ts_sec = 0;
+    uint64_t last_exec_loop_script_ts_sec = 0;
 
     do{
 
@@ -923,8 +988,11 @@ void primary_process_loop( gnb_core_t *gnb_core ){
 
         if ( 0!=ret ) {
             perror("gettimeofday");
-            exit(0);
+            exit(1);
         }
+
+        gnb_core->now_time_sec  = gnb_core->now_timeval.tv_sec;
+        gnb_core->now_time_usec = gnb_core->now_timeval.tv_sec * 1000000 + gnb_core->now_timeval.tv_usec;
 
         gnb_core->ctl_block->status_zone->keep_alive_ts_sec = (uint64_t)gnb_core->now_timeval.tv_sec;
 
@@ -945,6 +1013,31 @@ void primary_process_loop( gnb_core_t *gnb_core ){
             }
 
             last_exec_es_ts_sec = gnb_core->ctl_block->status_zone->keep_alive_ts_sec;
+        }
+
+        if ( gnb_core->ctl_block->status_zone->keep_alive_ts_sec - last_exec_loop_script_ts_sec > GNB_EXEC_SCRIPT_INTERVAL_TIME_SEC ) {
+
+            #if defined(__FreeBSD__)
+            exec_loop_script(gnb_core,"if_loop_freebsd.sh");
+            #endif
+
+            #if defined(__APPLE__)
+            exec_loop_script(gnb_core,"if_loop_darwin.sh");
+            #endif
+
+            #if defined(__OpenBSD__)
+            exec_loop_script(gnb_core,"if_loop_linux.sh");
+            #endif
+
+            #if defined(__linux__)
+            exec_loop_script(gnb_core,"if_loop_linux.sh");
+            #endif
+
+            #if defined(_WIN32)
+            #endif
+
+            last_exec_loop_script_ts_sec = gnb_core->ctl_block->status_zone->keep_alive_ts_sec;
+
         }
 
     }while(1);

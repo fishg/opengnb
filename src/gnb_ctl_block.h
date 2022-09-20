@@ -26,13 +26,13 @@
 #include "gnb_node_type.h"
 #include "gnb_log_type.h"
 
+#define GNB_TUN_PAYLOAD_BLOCK_SIZE  1024*4
+#define GNB_INET_PAYLOAD_BLOCK_SIZE 1024*4
 
-#define GNB_TUN_PAYLOAD_BLOCK_SIZE  4096
-#define GNB_INET_PAYLOAD_BLOCK_SIZE 4096
+#define GNB_PAYLOAD_BUFFER_PADDING_SIZE 1024
 
 #define CTL_BLOCK_ES_MAGIC_IDX 3
 #define CTL_BLOCK_VT_MAGIC_IDX 4
-
 
 typedef struct _gnb_ctl_magic_number_t {
 
@@ -74,8 +74,8 @@ typedef struct _gnb_ctl_core_zone_t {
 
 	unsigned char ufwd_address_block[ sizeof(gnb_address_list_t) + sizeof(gnb_address_t) * 16 ];
 
-	unsigned char  tun_payload_block[sizeof(gnb_payload16_t)+GNB_TUN_PAYLOAD_BLOCK_SIZE];
-	unsigned char inet_payload_block[sizeof(gnb_payload16_t)+GNB_INET_PAYLOAD_BLOCK_SIZE];
+	unsigned char  tun_payload_block[ GNB_PAYLOAD_BUFFER_PADDING_SIZE + sizeof(gnb_payload16_t) + GNB_TUN_PAYLOAD_BLOCK_SIZE];
+	unsigned char inet_payload_block[ GNB_PAYLOAD_BUFFER_PADDING_SIZE + sizeof(gnb_payload16_t) + GNB_INET_PAYLOAD_BLOCK_SIZE];
 
 }gnb_ctl_core_zone_t;
 
@@ -110,7 +110,7 @@ typedef struct _gnb_ctl_block_t {
 
 	gnb_ctl_node_zone_t    *node_zone;
 
-	gnb_mmap_block_t *mmap_block;
+	gnb_mmap_block_t       *mmap_block;
 
 }gnb_ctl_block_t;
 
@@ -131,4 +131,3 @@ gnb_ctl_block_t *gnb_get_ctl_block(const char *ctl_block_file, int flag);
 #define GNB_CTL_KEEP_ALIVE_TS 15
 
 #endif
-

@@ -15,6 +15,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__APPLE__) || defined(__OpenBSD__)
+#define __UNIX_LIKE_OS__ 1
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,18 +27,31 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#ifdef __UNIX_LIKE_OS__
+#include <arpa/inet.h>
+#endif
+
+
+#if defined(_WIN32)
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
+
 #include "gnb_conf_type.h"
 #include "gnb_node_type.h"
 #include "gnb_ctl_block.h"
 #include "gnb_time.h"
 #include "es/gnb_es_type.h"
 
-
 #include "miniupnpc.h"
+#include "natpmp.h"
 #include "upnpcommands.h"
 
-
-static void gnb_es_upnp_em(gnb_conf_t *conf, gnb_log_ctx_t *log){
+static void gnb_es_upnp_em(gnb_es_ctx *es_ctx, gnb_conf_t *conf, gnb_log_ctx_t *log){
 
     const char *rootdescurl = NULL;
 
@@ -42,7 +59,7 @@ static void gnb_es_upnp_em(gnb_conf_t *conf, gnb_log_ctx_t *log){
 
     const char *multicastif = NULL;
 
-    const char *minissdpdpath = NULL;
+    const char *minissdpdpath = "";
 
     int localport = UPNP_LOCAL_PORT_ANY;
 
@@ -77,11 +94,18 @@ static void gnb_es_upnp_em(gnb_conf_t *conf, gnb_log_ctx_t *log){
     char ext_port_string[6];
     char in_port_string[6];
 
+    if ( NULL == es_ctx->upnp_multicase_if ) {
+        es_ctx->upnp_multicase_if = getenv("GNB_UPNP_MULTICAST_IF");
+    }
+
+    multicastif = es_ctx->upnp_multicase_if;
+
     devlist = upnpDiscover(2000, multicastif, minissdpdpath, localport, ipv6, ttl, &error);
 
     GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "UPNPC Try to UPNP_GetValidIGD.\n");
 
     if ( NULL == devlist ) {
+        GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "UPNPC upnpDiscover get devlist faile! error=%d .....\n", error);
         return;
     }
 
@@ -185,8 +209,143 @@ next:
 }
 
 
-void gnb_es_upnp(gnb_conf_t *conf, gnb_log_ctx_t *log){
+int gnb_es_natpnpc(gnb_es_ctx *es_ctx, gnb_conf_t *conf, gnb_log_ctx_t *log){
 
-    gnb_es_upnp_em(conf, log);
+    int forcegw = 0;
+    in_addr_t gateway = 0;
+    natpmp_t natpmp;
+    natpmpresp_t response;
+
+    struct in_addr gateway_in_use;
+
+    uint32_t lifetime = 3600;
+
+    int i;
+    int r;
+    int sav_errno;
+
+    int ret = 0;
+
+    if ( NULL != es_ctx->upnp_gateway4 ) {
+
+        inet_pton(AF_INET, es_ctx->upnp_gateway4, &gateway);
+        forcegw = 1;
+
+    } else {
+
+        es_ctx->upnp_gateway4 = getenv("GNB_UPNP_GATEWAY");
+
+        if ( NULL != es_ctx->upnp_gateway4 ) {
+            inet_pton(AF_INET, es_ctx->upnp_gateway4, &gateway);
+            forcegw = 1;
+        }
+
+    }
+
+    r = initnatpmp(&natpmp, forcegw, gateway);
+
+    if ( r < 0 ) {
+        ret = -1;
+        goto finish;        
+    }
+
+    gateway_in_use.s_addr = natpmp.gateway;
+
+    r = sendpublicaddressrequest(&natpmp);
+
+    if ( r < 0 ) {
+        ret = -2;
+        goto finish;
+    }
+
+    struct timeval timeout;
+    fd_set fds;
+
+    do {
+
+        FD_ZERO(&fds);
+
+        FD_SET(natpmp.s, &fds);
+
+        getnatpmprequesttimeout(&natpmp, &timeout);
+
+        r = select(FD_SETSIZE, &fds, NULL, NULL, &timeout);
+
+        if ( r < 0 ) {
+            ret = -3;
+            goto finish;
+        }
+
+        r = readnatpmpresponseorretry(&natpmp, &response);
+
+        sav_errno = errno;
+
+        GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "readnatpmpresponseorretry returned %d (%s)\n", r, r==0?"OK":(r==NATPMP_TRYAGAIN?"TRY AGAIN":"FAILED"));
+
+        if( r<0 && r!=NATPMP_TRYAGAIN ) {
+
+#ifdef ENABLE_STRNATPMPERR
+            GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "readnatpmpresponseorretry() failed : %s\n", strnatpmperr(r));
+#endif
+
+            GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "errno=%d '%s'\n", sav_errno, strerror(sav_errno));
+
+        }
+
+    } while (r==NATPMP_TRYAGAIN);
+
+    if ( r < 0 ) {
+        ret = -4;
+        goto finish;
+    }
+
+    for ( i = 0; i < conf->udp4_socket_num; i++ ) {
+
+        r = sendnewportmappingrequest(&natpmp, NATPMP_PROTOCOL_UDP, conf->udp4_ports[i], conf->udp4_ext_ports[i], lifetime);
+
+        if ( r<0 ) {
+            continue;
+        }
+
+        do {
+
+            FD_ZERO(&fds);
+
+            FD_SET(natpmp.s, &fds);
+
+            getnatpmprequesttimeout(&natpmp, &timeout);
+            
+            select(FD_SETSIZE, &fds, NULL, NULL, &timeout);
+            
+            r = readnatpmpresponseorretry(&natpmp, &response);
+            
+            GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "readnatpmpresponseorretry returned %d (%s)\n", r, r==0?"OK":(r==NATPMP_TRYAGAIN?"TRY AGAIN":"FAILED"));
+
+        } while(r==NATPMP_TRYAGAIN);
+
+    }
+
+finish:
+
+    r = closenatpmp(&natpmp);
+
+    return ret;
+
+}
+
+void gnb_es_upnp(gnb_es_ctx *es_ctx, gnb_conf_t *conf, gnb_log_ctx_t *log){
+
+    int ret;
+    
+    ret = gnb_es_natpnpc(es_ctx, conf, log);
+
+    if ( 0 == ret ) {    
+        GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "gnb_es_natpnpc finish upnp\n");
+        return;
+    }
+
+    GNB_LOG1(log, GNB_LOG_ID_ES_UPNP, "gnb_es_natpnpc ret=%d next gnb_es_upnp_em\n", ret);
+
+    gnb_es_upnp_em(es_ctx, conf, log);
 
 }

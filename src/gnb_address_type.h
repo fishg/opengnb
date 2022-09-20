@@ -37,6 +37,7 @@
 #define GNB_IP6_PORT_STRING_SIZE ( 46 + 2 + sizeof("65535") + 1 )
 #define GNB_IP4_PORT_STRING_SIZE ( 16 + 1 + sizeof("65535") + 1 )
 
+#pragma pack(push, 1)
 typedef struct _gnb_address_t{
 
 	int  type; //AF_INET AF_INET6
@@ -62,7 +63,7 @@ typedef struct _gnb_address_t{
 	uint16_t port;
 
 }gnb_address_t;
-
+#pragma pack(pop)
 
 typedef struct _gnb_address_list_t{
 
@@ -101,6 +102,7 @@ typedef struct _gnb_sockaddress_t{
 	socklen_t socklen;
 
 }gnb_sockaddress_t;
+
 
 
 #endif

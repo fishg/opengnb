@@ -72,7 +72,7 @@ gnb_ctl_block_t *gnb_ctl_block_build(void *memory, size_t node_num){
     block->size = sizeof(gnb_ctl_magic_number_t);
     ctl_block->magic_number = (gnb_ctl_magic_number_t *)block->data;
     off_set += sizeof(gnb_block32_t) + sizeof(gnb_ctl_magic_number_t);
-    snprintf((char *)ctl_block->magic_number->data, 16, "%s", "GNB Ver1.2.8");
+    snprintf((char *)ctl_block->magic_number->data, 16, "%s", "GNB Ver1.3.0");
 
     ctl_block->entry_table256[GNB_CTL_CONF] = off_set;
     block = memory + ctl_block->entry_table256[GNB_CTL_CONF];
@@ -154,7 +154,9 @@ void gnb_ctl_block_setup(gnb_ctl_block_t *ctl_block, void *memory){
 
 }
 
-
+/*
+ flag = 0 readonly
+*/
 gnb_ctl_block_t *gnb_get_ctl_block(const char *ctl_block_file, int flag){
 
     ssize_t ctl_file_size = 0;
@@ -196,6 +198,10 @@ gnb_ctl_block_t *gnb_get_ctl_block(const char *ctl_block_file, int flag){
     gnb_ctl_block_setup(ctl_block, memory);
 
     ctl_block->mmap_block = mmap_block;
+
+    if ( 0 == flag ) {
+        return ctl_block;
+    }
 
     if ( now_sec < ctl_block->status_zone->keep_alive_ts_sec ) {
         goto finish_error;

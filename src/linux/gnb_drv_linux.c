@@ -43,6 +43,8 @@
 #include <linux/ipv6.h>
 
 #include "gnb.h"
+#include "gnb_arg_list.h"
+#include "gnb_exec.h"
 #include "gnb_tun_drv.h"
 #include "gnb_payload16.h"
 
@@ -78,7 +80,7 @@ static void if_up_script(gnb_core_t *gnb_core){
 
     char cmd[PATH_MAX+NAME_MAX];
 
-    snprintf(cmd,PATH_MAX+NAME_MAX,"\"%s/script/%s\" > /dev/null 2>&1",gnb_core->conf->conf_dir,"if_up_linux.sh");
+    snprintf(cmd,PATH_MAX+NAME_MAX,"\"%s/scripts/%s\" > /dev/null 2>&1",gnb_core->conf->conf_dir,"if_up_linux.sh");
 
     ret = system(cmd);
 
@@ -97,7 +99,7 @@ static void if_down_script(gnb_core_t *gnb_core){
 
     char cmd[PATH_MAX+NAME_MAX];
 
-    snprintf(cmd,PATH_MAX+NAME_MAX,"\"%s/script/%s\" > /dev/null 2>&1",gnb_core->conf->conf_dir,"if_down_linux.sh");
+    snprintf(cmd,PATH_MAX+NAME_MAX,"\"%s/scripts/%s\" > /dev/null 2>&1",gnb_core->conf->conf_dir,"if_down_linux.sh");
 
     ret = system(cmd);
 
@@ -108,6 +110,7 @@ static void if_down_script(gnb_core_t *gnb_core){
     return;
 
 }
+
 
 static void setifmtu(char *if_name,int mtu) {
 
@@ -134,6 +137,7 @@ static void setifmtu(char *if_name,int mtu) {
     close(socket_fd);
 }
 
+
 static int set_addr4(char *interface_name, char *ip, char *netmask){
 
     int socket_fd;
@@ -155,7 +159,7 @@ static int set_addr4(char *interface_name, char *ip, char *netmask){
 
     if ( ioctl(socket_fd, SIOCSIFADDR, &ifr) < 0 ) {
         perror("ioctl addr4 SIOCSIFADDR");
-        exit(0);
+        exit(1);
     }
 
     struct ifreq ifr_mask;
@@ -174,7 +178,7 @@ static int set_addr4(char *interface_name, char *ip, char *netmask){
 
     if ( ioctl(socket_fd, SIOCSIFNETMASK, &ifr_mask ) < 0 ) {
         perror("ioctl addr4 SIOCSIFNETMASK");
-        exit(0);
+        exit(1);
     }
 
     close(socket_fd);
